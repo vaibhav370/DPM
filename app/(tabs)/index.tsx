@@ -18,7 +18,11 @@ export default function FeedScreen() {
     if (state.mode === 'calm') {
       posts = posts.filter((p) => p.arousal_level !== 'high');
     } else if (state.mode === 'focus') {
-      posts = posts.filter((p) => p.arousal_level !== 'high' && !p.topics.includes('memes'));
+      posts = posts.filter((p) => p.arousal_level !== 'high' && !p.topics.includes('memes') && !p.topics.includes('humor'));
+    } else if (state.mode === 'study') {
+      posts = posts.filter((p) => 
+        p.topics.some(t => ['study', 'education', 'science', 'math', 'philosophy', 'programming', 'tech'].includes(t.toLowerCase()))
+      );
     }
 
     // 2. Custom AI Mode Filtering (Sage Curation)
@@ -27,12 +31,24 @@ export default function FeedScreen() {
     const customMode = state.customModes[state.mode];
     if (customMode && customMode.intent) {
       const intentLower = customMode.intent.toLowerCase();
-      // Only keep posts where at least one of their topics is mentioned in the intent string.
-      // This is a rough simulation of AI semantic matching.
-      posts = posts.filter((p) => 
-        p.topics.some(topic => intentLower.includes(topic.toLowerCase())) ||
-        intentLower.includes('all') // fallback if the intent just says "show me all..."
-      );
+      // Extract keywords from intent (longer than 3 chars)
+      const keywords = intentLower.split(/[\s,.]+/).filter(k => k.length > 3);
+
+      posts = posts.filter((p) => {
+        // If the intent mentions "all", show everything
+        if (intentLower.includes('all')) return true;
+        
+        // Match against topics
+        const topicMatch = p.topics.some(topic => 
+          intentLower.includes(topic.toLowerCase()) || 
+          keywords.some(k => topic.toLowerCase().includes(k))
+        );
+        
+        // Match against caption
+        const captionMatch = keywords.some(k => p.caption.toLowerCase().includes(k));
+        
+        return topicMatch || captionMatch;
+      });
     }
     
     // Explicit tag filtering (from older implementation, kept for safety)
@@ -45,7 +61,13 @@ export default function FeedScreen() {
     }
 
     // Always ensure we have *some* content so the feed isn't completely empty and broken
+    // but prioritize the filtered list if it has items.
     if (posts.length === 0) {
+      // If we are in study mode and nothing matched, show some relevant study items as fallback
+      if (state.mode === 'study') {
+        const studyFallback = MOCK_POSTS.filter(p => p.topics.includes('science') || p.topics.includes('study')).slice(0, 3);
+        return studyFallback.length > 0 ? studyFallback : MOCK_POSTS.slice(0, 3);
+      }
       return MOCK_POSTS.slice(0, 3);
     }
 
